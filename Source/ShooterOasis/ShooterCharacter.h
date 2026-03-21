@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "InputActionValue.h"
 #include "ShooterCharacter.generated.h"
 
 UCLASS()
@@ -19,7 +20,18 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-public:	
+	// Default Player Mapping Context
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputMappingContext* PlayerMappingContext;
+
+	// Function to move in all directions
+	void Move(const FInputActionValue& Value);
+
+	// Input Action Move
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputAction* MoveAction;
+
+public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
@@ -31,8 +43,13 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = CameraSet, meta = (AllowPrivateAccess = "true"))
 	class USpringArmComponent* CameraBoom;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = CameraSet, meta = (AllowPrivateAccess = "true"))
+	class UCameraComponent* PlayerCamera;
+
 public:
 
+	// Using FORCEINLINE tells the compiler must be an inline function and useful for functions called very frequently during play.
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+	FORCEINLINE UCameraComponent* GetPlayerCamera() const { return PlayerCamera; }
 
 };
