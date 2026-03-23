@@ -59,6 +59,7 @@ void AShooterCharacter::Move(const FInputActionValue& Value)
 		const FRotator Rotation = Controller->GetControlRotation();
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
+		// Double check these lines when possible during the training videos.
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
@@ -68,20 +69,14 @@ void AShooterCharacter::Move(const FInputActionValue& Value)
 	}
 }
 
-void AShooterCharacter::Turn(const FInputActionValue& Value)
+void AShooterCharacter::LookAround(const FInputActionValue& Value)
 {
-	const FVector2D TurnVector = Value.Get<FVector2D>();
+	const FVector2D LookAroundVector = Value.Get<FVector2D>();
 	const float TurnScaleFactor = 1.0f;
-	
-	AddControllerYawInput(TurnVector.X * TurnScaleFactor);
-}
-
-void AShooterCharacter::LookUp(const FInputActionValue& Value)
-{
-	const FVector2D LookUpVector = Value.Get<FVector2D>();
 	const float LookUpScaleFactor = 1.0f;
 
-	AddControllerPitchInput(LookUpVector.Y * LookUpScaleFactor);
+	AddControllerYawInput(LookAroundVector.X * TurnScaleFactor);
+	AddControllerPitchInput(LookAroundVector.Y * LookUpScaleFactor);
 }
 
 // Called every frame
@@ -99,8 +94,8 @@ void AShooterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AShooterCharacter::Move);
-		EnhancedInputComponent->BindAction(LookupAction, ETriggerEvent::Triggered, this, &AShooterCharacter::LookUp);
-		EnhancedInputComponent->BindAction(TurnAction, ETriggerEvent::Triggered, this, &AShooterCharacter::Turn);
+		EnhancedInputComponent->BindAction(LookAroundAction, ETriggerEvent::Triggered, this, &AShooterCharacter::LookAround);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AShooterCharacter::Jump);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AShooterCharacter::StopJumping);
 	}
 }
-

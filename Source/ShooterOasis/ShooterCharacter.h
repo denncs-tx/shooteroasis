@@ -28,22 +28,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	class UInputAction* MoveAction;
 
-	// Action to look up and down
+	// Action to turn - yaw and look up and down together
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* LookupAction;
+	UInputAction* LookAroundAction;
 
-	// Action to turn - yaw
+	// Action to jump
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* TurnAction;
+	UInputAction* JumpAction;
 
 	// Function to move in all directions
 	void Move(const FInputActionValue& Value);
 
-	// Rotate controller based on mouse x movement or right gamepad x movement
-	void Turn(const FInputActionValue& Value);
-
-	// Look up or down based on mouse y movement or right gamepad y movement
-	void LookUp(const FInputActionValue& Value);
+	// Look up or down and in yaw by using mouse movement or right gamepad y movement
+	void LookAround(const FInputActionValue& Value);
 
 public:
 	// Called every frame
