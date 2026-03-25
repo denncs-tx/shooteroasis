@@ -25,7 +25,7 @@ AShooterCharacter::AShooterCharacter()
 	PlayerCamera->bUsePawnControlRotation = false;
 
 	bUseControllerRotationYaw = false;
-	bUseControllerRotationPitch = true;
+	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
