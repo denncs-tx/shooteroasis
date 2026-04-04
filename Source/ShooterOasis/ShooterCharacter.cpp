@@ -8,6 +8,12 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundCue.h"
+
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
+#include "Engine/SkeletalMeshSocket.h"
 
 // Sets default values
 AShooterCharacter::AShooterCharacter()
@@ -25,7 +31,7 @@ AShooterCharacter::AShooterCharacter()
 	PlayerCamera->bUsePawnControlRotation = false;
 
 	bUseControllerRotationYaw = false;
-	bUseControllerRotationPitch = false;
+	bUseControllerRotationPitch = true;
 	bUseControllerRotationRoll = false;
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -79,11 +85,39 @@ void AShooterCharacter::LookAround(const FInputActionValue& Value)
 	AddControllerPitchInput(LookAroundVector.Y * LookUpScaleFactor);
 }
 
+void AShooterCharacter::ShootButtonPressed(const FInputActionValue& Value)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Shoot Button Pressed"));
+
+	if (ShootSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, ShootSound, GetActorLocation());
+	}
+
+	if (!MuzzleFlashNiagara) return;
+
+	if (const USkeletalMeshSocket* BarrelSocket = GetMesh()->GetSocketByName(TEXT("BarrelSocket")))
+	{
+		const FTransform SocketTransform = BarrelSocket->GetSocketTransform(GetMesh());
+
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			GetWorld(), 
+			MuzzleFlashNiagara, 
+			SocketTransform.GetLocation(), 
+			SocketTransform.Rotator()
+		);
+	}
+}
+
+void AShooterCharacter::ShootButtonReleased(const FInputActionValue& Value)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Shoot Button Released"));
+}
+
 // Called every frame
 void AShooterCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 }
 
 // Called to bind functionality to input
@@ -95,7 +129,11 @@ void AShooterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	{
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AShooterCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAroundAction, ETriggerEvent::Triggered, this, &AShooterCharacter::LookAround);
+
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AShooterCharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AShooterCharacter::StopJumping);
+
+		EnhancedInputComponent->BindAction(ShootStartAction, ETriggerEvent::Triggered, this, &AShooterCharacter::ShootButtonPressed);
+		EnhancedInputComponent->BindAction(ShootEndAction, ETriggerEvent::Triggered, this, &AShooterCharacter::ShootButtonReleased);
 	}
 }

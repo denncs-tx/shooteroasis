@@ -7,6 +7,13 @@
 #include "InputActionValue.h"
 #include "ShooterCharacter.generated.h"
 
+class UInputMappingContext;
+class UInputAction;
+class USpringArmComponent;
+class UCameraComponent;
+class USoundCue;
+class UNiagaraSystem;
+
 UCLASS()
 class SHOOTEROASIS_API AShooterCharacter : public ACharacter
 {
@@ -22,25 +29,45 @@ protected:
 
 	// Default Player Mapping Context
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	class UInputMappingContext* PlayerMappingContext;
+	TObjectPtr<UInputMappingContext> PlayerMappingContext = nullptr;
 
 	// Input Action Move
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	class UInputAction* MoveAction;
+	TObjectPtr<UInputAction> MoveAction = nullptr;
 
 	// Action to turn - yaw and look up and down together
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* LookAroundAction;
+	TObjectPtr<UInputAction> LookAroundAction = nullptr;
 
 	// Action to jump
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	UInputAction* JumpAction;
+	TObjectPtr<UInputAction> JumpAction = nullptr;
+
+	// Action when start shooting
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ShootStartAction = nullptr;
+
+	// Action when stop shooting
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ShootEndAction = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USoundCue> ShootSound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> MuzzleFlashNiagara = nullptr;
 
 	// Function to move in all directions
 	void Move(const FInputActionValue& Value);
 
 	// Look up or down and in yaw by using mouse movement or right gamepad y movement
 	void LookAround(const FInputActionValue& Value);
+
+	// Method called when shooting a weapon
+	void ShootButtonPressed(const FInputActionValue& Value);
+
+	// Method called when releasing the shooting button
+	void ShootButtonReleased(const FInputActionValue& Value);
 
 public:
 	// Called every frame
@@ -52,10 +79,10 @@ public:
 private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = CameraSet, meta = (AllowPrivateAccess = "true"))
-	class USpringArmComponent* CameraBoom;
+	TObjectPtr<USpringArmComponent> CameraBoom = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = CameraSet, meta = (AllowPrivateAccess = "true"))
-	class UCameraComponent* PlayerCamera;
+	TObjectPtr<UCameraComponent> PlayerCamera = nullptr;
 
 public:
 
