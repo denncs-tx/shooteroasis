@@ -13,6 +13,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class USoundCue;
 class UNiagaraSystem;
+class UAnimMontage;
 
 UCLASS()
 class SHOOTEROASIS_API AShooterCharacter : public ACharacter
@@ -50,12 +51,40 @@ protected:
 	// Action when stop shooting
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> ShootEndAction = nullptr;
+	
+	// Action to aim
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> AimAction = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USoundCue> ShootSound = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNiagaraSystem> MuzzleFlashNiagara = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAnimMontage> HipFireMontage = nullptr;
+
+	// Bullet impact Niagara System on Surface
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> ImpactNiagara = nullptr;
+
+	// Add Decal Over Impacted Surface
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UMaterialInterface> ImpactDecalMat = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	FVector ImpactDecalSize = FVector(8.f, 8.f, 8.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	float ImpactDecalLifeSpan = 5.f;
+
+	// Bullet beam Niagara System
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> BulletBeamNiagara = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = Attack, meta = (AllowPrivateAccess = "true"))
+	bool bIsAiming = false;
 
 	// Function to move in all directions
 	void Move(const FInputActionValue& Value);
@@ -68,6 +97,12 @@ protected:
 
 	// Method called when releasing the shooting button
 	void ShootButtonReleased(const FInputActionValue& Value);
+
+	// Method call when aiming started
+	void OnAimStarted();
+
+	// Method call when aiming ended
+	void OnAimReleased();
 
 public:
 	// Called every frame

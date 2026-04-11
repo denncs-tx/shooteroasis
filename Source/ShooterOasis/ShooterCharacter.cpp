@@ -15,6 +15,9 @@
 #include "NiagaraComponent.h"
 #include "Engine/SkeletalMeshSocket.h"
 
+#include "Animation/AnimInstance.h"
+#include "DrawDebugHelpers.h"
+
 // Sets default values
 AShooterCharacter::AShooterCharacter()
 {
@@ -23,18 +26,19 @@ AShooterCharacter::AShooterCharacter()
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.0f;
+	CameraBoom->TargetArmLength = 200.0f;
 	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->SocketOffset = FVector(0.f, 50.f, 70.f);
 
 	PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
 	PlayerCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	PlayerCamera->bUsePawnControlRotation = false;
 
-	bUseControllerRotationYaw = false;
-	bUseControllerRotationPitch = true;
+	bUseControllerRotationYaw = true;
+	bUseControllerRotationPitch = false;
 	bUseControllerRotationRoll = false;
 
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 540.f, 0.f);
 	GetCharacterMovement()->JumpZVelocity = 500.f;
 	GetCharacterMovement()->AirControl = 0.2f;
@@ -87,31 +91,175 @@ void AShooterCharacter::LookAround(const FInputActionValue& Value)
 
 void AShooterCharacter::ShootButtonPressed(const FInputActionValue& Value)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Shoot Button Pressed"));
-
 	if (ShootSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, ShootSound, GetActorLocation());
 	}
 
-	if (!MuzzleFlashNiagara) return;
+	const USkeletalMeshSocket* BarrelSocket = GetMesh()->GetSocketByName(TEXT("BarrelSocket"));
+	if (!BarrelSocket) return;
 
-	if (const USkeletalMeshSocket* BarrelSocket = GetMesh()->GetSocketByName(TEXT("BarrelSocket")))
+	const FTransform SocketTransform = BarrelSocket->GetSocketTransform(GetMesh());
+	const FVector MuzzleStart = SocketTransform.GetLocation();
+
+	if (MuzzleFlashNiagara)
 	{
-		const FTransform SocketTransform = BarrelSocket->GetSocketTransform(GetMesh());
-
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-			GetWorld(), 
-			MuzzleFlashNiagara, 
-			SocketTransform.GetLocation(), 
-			SocketTransform.Rotator()
-		);
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), MuzzleFlashNiagara, MuzzleStart, SocketTransform.GetRotation().Rotator());
 	}
+
+	// Get current size of the viewport
+	FVector2D ViewportSize;
+	if (GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->GetViewportSize(ViewportSize);
+	}
+
+	// Get Screen Location of the Crosshair
+	FVector2D CrosshairLocation = FVector2D(ViewportSize.X / 2.f, ViewportSize.Y / 2.f);
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	// De-project the screen position of the crosshair to a world direction
+	FVector CameraWorldPos;
+	FVector CameraWorldDir;
+	const bool bDeproject = UGameplayStatics::DeprojectScreenToWorld(PC, CrosshairLocation, CameraWorldPos, CameraWorldDir);
+	if (!bDeproject) return;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ShootTrace), true);
+	Params.AddIgnoredActor(this);
+
+	// 1) Trace from camera along crosshair world direction to find the impact point in the world
+	const float TraceRange = 50000.f;
+	const FVector AimTraceStart = CameraWorldPos;
+	const FVector AimTraceEnd = AimTraceStart + (CameraWorldDir * TraceRange);
+
+	FHitResult AimHit;
+	const bool bAimHit = GetWorld()->LineTraceSingleByChannel(AimHit, AimTraceStart, AimTraceEnd, ECC_Visibility, Params);
+
+	const FVector AimPoint = bAimHit ? AimHit.ImpactPoint : AimTraceEnd;
+
+	// 2) Trace from muzzle to AimPoint (prevents shooting through walls if the camera is behind cover, for example)
+	FHitResult MuzzleHit;
+	const float MuzzleTraceRadius = 3.0f;
+
+	const bool bMuzzleHit = GetWorld()->SweepSingleByChannel(MuzzleHit, MuzzleStart, AimPoint, FQuat::Identity, ECC_Visibility, 
+		FCollisionShape::MakeSphere(MuzzleTraceRadius), Params);
+	const bool bMuzzleBlockingHit = bMuzzleHit && MuzzleHit.bBlockingHit;
+	const FVector FinalImpactPoint = bMuzzleBlockingHit ? MuzzleHit.ImpactPoint : AimPoint;
+
+	// Beam VFX: muzzle to impact point
+	if (BulletBeamNiagara)
+	{
+		UNiagaraComponent* BeamComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), BulletBeamNiagara, MuzzleStart, SocketTransform.Rotator());
+		
+		if (BeamComp)
+		{
+			BeamComp->SetVectorParameter(FName("Start"), MuzzleStart);
+			BeamComp->SetVectorParameter(FName("Target"), FinalImpactPoint);
+		}
+	}
+
+	// Impact VFX + decal only if we hit something
+	if (bMuzzleBlockingHit)
+	{
+		if (ImpactNiagara)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactNiagara, MuzzleHit.ImpactPoint, MuzzleHit.ImpactNormal.Rotation());
+		}
+		if (ImpactDecalMat)
+		{
+			const FVector N = MuzzleHit.ImpactNormal.GetSafeNormal();
+			UGameplayStatics::SpawnDecalAtLocation(GetWorld(), ImpactDecalMat, ImpactDecalSize, MuzzleHit.ImpactPoint + N, (-N).Rotation(), 20.f);
+		}
+	}
+
+	/*
+	const USkeletalMeshSocket* BarrelSocket = GetMesh()->GetSocketByName(TEXT("BarrelSocket"));
+	if (!BarrelSocket) return;
+
+	const FTransform SocketTransform = BarrelSocket->GetSocketTransform(GetMesh());
+	const FVector TraceStart = SocketTransform.GetLocation();
+	const FVector TraceEnd = TraceStart + (SocketTransform.GetRotation().GetForwardVector() * 10000.f);
+
+	if (MuzzleFlashNiagara)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, MuzzleFlashNiagara, SocketTransform.GetLocation(), SocketTransform.GetRotation().Rotator());
+	}
+
+	// Trace (ignore self)
+	FHitResult HitResult;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ShootTrace), true);
+	Params.AddIgnoredActor(this);
+
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, Params);
+
+	const FVector End = bHit ? HitResult.ImpactPoint : TraceEnd;
+
+	// Spawn beam (instant tracer)
+	if (BulletBeamNiagara)
+	{
+		UNiagaraComponent* BeamComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, BulletBeamNiagara, TraceStart, SocketTransform.Rotator());
+
+		if (BeamComp)
+		{
+			BeamComp->SetVectorParameter(FName("Start"), TraceStart);;
+			BeamComp->SetVectorParameter(FName("Target"), End);
+		}
+	}
+
+	// Impact VFX + decal only if we hit something
+	if (bHit)
+	{
+		if (ImpactNiagara)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactNiagara, HitResult.ImpactPoint, HitResult.ImpactNormal.Rotation());
+		}
+		if (ImpactDecalMat)
+		{
+			const FVector N = HitResult.ImpactNormal.GetSafeNormal();
+			UGameplayStatics::SpawnDecalAtLocation(GetWorld(), ImpactDecalMat, ImpactDecalSize, HitResult.ImpactPoint + N, (-N).Rotation(), 20.f);
+		}
+	}
+	*/
+
+	static const FName BeginFireSectionName = FName("BeginFire");
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		if (HipFireMontage)
+		{
+			if (!AnimInstance->Montage_IsPlaying(HipFireMontage))
+			{
+				AnimInstance->Montage_Play(HipFireMontage);
+			}
+			AnimInstance->Montage_JumpToSection(BeginFireSectionName, HipFireMontage);
+		}
+	}
+	
 }
 
 void AShooterCharacter::ShootButtonReleased(const FInputActionValue& Value)
 {
 	UE_LOG(LogTemp, Warning, TEXT("Shoot Button Released"));
+}
+
+void AShooterCharacter::OnAimStarted()
+{
+	bIsAiming = true;
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Green, TEXT("Aiming Started"));
+	}
+}
+
+void AShooterCharacter::OnAimReleased()
+{
+	bIsAiming = false;
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, TEXT("Aiming Ended"));
+	}
 }
 
 // Called every frame
@@ -135,5 +283,8 @@ void AShooterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 		EnhancedInputComponent->BindAction(ShootStartAction, ETriggerEvent::Triggered, this, &AShooterCharacter::ShootButtonPressed);
 		EnhancedInputComponent->BindAction(ShootEndAction, ETriggerEvent::Triggered, this, &AShooterCharacter::ShootButtonReleased);
+
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &AShooterCharacter::OnAimStarted);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &AShooterCharacter::OnAimReleased);
 	}
 }
